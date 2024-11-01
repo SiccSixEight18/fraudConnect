@@ -6,6 +6,12 @@ import pandas as pd
 from datetime import datetime
 import matplotlib.patches as patches
 
+def truncate_text(text: str, max_length: int) -> str:
+    """Truncate text and add ellipsis if needed"""
+    if len(text) <= max_length:
+        return text
+    return text[:max_length] + '...'
+
 def process_text_input(text: str) -> List[str]:
     """Convert text input into list, handling various formats"""
     if not text.strip():
@@ -48,49 +54,61 @@ def create_connection_graph(data_dict):
     
     return G
 
-def plot_graph(G, title_text):
+def plot_graph(G, title_text, max_label_length, min_node_size, max_node_size):
     """Create and return an enhanced plot of the graph"""
-    # Create figure with specific size and background color
     plt.figure(figsize=(15, 10), facecolor='#f0f2f6')
     
-    # Create main axis with a slight gray background
     ax = plt.gca()
     ax.set_facecolor('#f8f9fa')
     
     # Get node colors
     colors = [G.nodes[node]['color'] for node in G.nodes()]
     
-    # Use spring layout with optimized parameters
+    # Calculate node sizes based on number of connections
+    degrees = dict(G.degree())
+    max_degree = max(degrees.values()) if degrees else 1
+    min_degree = min(degrees.values()) if degrees else 1
+    
+    # Scale node sizes between min and max size based on connections
+    node_sizes = []
+    for node in G.nodes():
+        if max_degree == min_degree:
+            size = (min_node_size + max_node_size) / 2
+        else:
+            size = min_node_size + (max_node_size - min_node_size) * \
+                   (degrees[node] - min_degree) / (max_degree - min_degree)
+        node_sizes.append(size)
+    
     pos = nx.spring_layout(G, k=1.5, iterations=50)
     
-    # Draw edges with alpha for better visibility
+    # Draw edges
     nx.draw_networkx_edges(G, pos,
                           edge_color='#2c3e50',
                           alpha=0.2,
                           width=1.5)
     
-    # Draw nodes with enhanced styling
+    # Draw nodes with varying sizes
     nx.draw_networkx_nodes(G, pos,
                           node_color=colors,
-                          node_size=2500,
+                          node_size=node_sizes,
                           alpha=0.7,
                           edgecolors='white',
                           linewidths=2)
     
-    # Draw labels with improved styling
+    # Draw labels with truncation
+    labels = {node: truncate_text(node, max_label_length) for node in G.nodes()}
     nx.draw_networkx_labels(G, pos,
+                           labels=labels,
                            font_size=9,
                            font_weight='bold',
                            font_family='sans-serif')
     
-    # Add title with enhanced styling
     plt.title(title_text, 
              pad=20,
              fontsize=14,
              fontweight='bold',
              fontfamily='sans-serif')
     
-    # Add date stamp in bottom right corner
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
     plt.text(0.98, 0.02, f"Generated: {current_time}",
              fontsize=8,
@@ -98,18 +116,15 @@ def plot_graph(G, title_text):
              ha='right',
              alpha=0.7)
     
-    # Add a subtle grid
     plt.grid(True, linestyle='--', alpha=0.1)
-    
-    # Add padding around the plot
     plt.tight_layout(pad=2.0)
     
     return plt
 
-# Set up the Streamlit page with improved styling
+# Set up the Streamlit page
 st.set_page_config(page_title="Connection Visualizer", layout="wide")
 
-# Custom CSS for better styling
+# Custom CSS
 st.markdown("""
     <style>
     .stTextInput > label {
@@ -129,17 +144,40 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Main title with styling
 st.title("🔍 Connection Pattern Visualizer")
 st.markdown("---")
 
-# Description
-st.markdown("""
-    Enter data in the columns below to visualize connections. Data points in the same row will be connected in the visualization.
-    Each column is color-coded in the final graph for easy identification.
-""")
+# Add visualization settings in an expander
+with st.expander("Visualization Settings", expanded=False):
+    st.markdown("### Display Settings")
+    col_settings1, col_settings2 = st.columns(2)
+    
+    with col_settings1:
+        max_label_length = st.slider(
+            "Maximum Label Length",
+            min_value=5,
+            max_value=50,
+            value=20,
+            help="Truncate node labels to this length"
+        )
+        
+    with col_settings2:
+        min_node_size = st.slider(
+            "Minimum Node Size",
+            min_value=1000,
+            max_value=3000,
+            value=2000,
+            help="Size of nodes with fewest connections"
+        )
+        max_node_size = st.slider(
+            "Maximum Node Size",
+            min_value=2000,
+            max_value=5000,
+            value=4000,
+            help="Size of nodes with most connections"
+        )
 
-# Create columns for the text inputs with improved layout
+# Create columns for the text inputs
 col1, col2 = st.columns(2)
 col3, col4 = st.columns(2)
 
@@ -159,14 +197,11 @@ with col4:
     column4_name = st.text_input("Column 4 Name", "Custom Field")
     column4_data = st.text_area(f"Paste {column4_name} (one per line)", height=150)
 
-# Title input for the visualization
 title_text = st.text_input("Visualization Title", 
                           "Connection Analysis of Fraud Patterns",
                           help="Enter a brief title or description for your visualization")
 
-# Add a button to generate the visualization
 if st.button("Generate Visualization", type="primary"):
-    # Process all inputs
     data = {
         'col1': process_text_input(column1_data),
         'col2': process_text_input(column2_data),
@@ -174,17 +209,13 @@ if st.button("Generate Visualization", type="primary"):
         'col4': process_text_input(column4_data)
     }
     
-    # Check if we have any data to process
     if any(data.values()):
-        # Create and display the graph
         G = create_connection_graph(data)
-        plt = plot_graph(G, title_text)
+        plt = plot_graph(G, title_text, max_label_length, min_node_size, max_node_size)
         st.pyplot(plt)
         
-        # Display connection analysis with improved styling
         st.markdown("### 📊 Connection Analysis")
         
-        # Find nodes with multiple connections
         connected_nodes = []
         for node in G.nodes():
             degree = G.degree(node)
@@ -197,6 +228,7 @@ if st.button("Generate Visualization", type="primary"):
         
         if connected_nodes:
             analysis_df = pd.DataFrame(connected_nodes)
+            analysis_df = analysis_df.sort_values('Connections', ascending=False)
             st.dataframe(analysis_df, use_container_width=True)
         else:
             st.info("No shared connections found in the data.")
@@ -204,7 +236,6 @@ if st.button("Generate Visualization", type="primary"):
     else:
         st.warning("Please enter some data in at least two columns to generate a visualization.")
 
-# Add sample data button with improved styling
 with st.expander("Show Sample Data"):
     st.markdown("### Sample Data for Testing")
     sample_data = {
