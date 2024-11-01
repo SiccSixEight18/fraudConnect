@@ -1,0 +1,34 @@
+I'll create a simpler web app with exactly this functionality - four text boxes where you can paste lists of values and visualize their connections.
+Multi-Column Fraud Connection VisualizerClick to open code
+To use this:
+
+Save as app.py
+Install requirements:
+
+bashCopypip install streamlit networkx matplotlib pandas
+
+Run:
+
+bashCopystreamlit run app.py
+Features:
+
+Four customizable text boxes with editable column names
+Automatic connection detection between values in the same row
+Color-coded nodes by column type
+Connection analysis showing shared values
+Sample data button
+PNG visualization (save by right-clicking the graph)
+
+The visualization shows:
+
+Each unique value as a node
+Different colors for different column types
+Lines connecting values that appear in the same row
+Clear labels for all values
+
+Would you like me to adjust anything about:
+
+The visualization style
+Node colors
+Layout algorithm
+Analysis details

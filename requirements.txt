@@ -1,0 +1,6 @@
+# requirements.txt
+streamlit
+networkx
+matplotlib
+pandas
+pyinstaller
