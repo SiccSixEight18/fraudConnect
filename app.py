@@ -6,8 +6,8 @@ import pandas as pd
 from datetime import datetime
 import matplotlib.patches as patches
 import numpy as np
-from mplcursors import cursor
 
+# Utility Functions
 def truncate_text(text: str, max_length: int, truncate_start: bool = True) -> str:
     """Truncate text and add ellipsis at start or end"""
     if len(text) <= max_length:
@@ -15,6 +15,12 @@ def truncate_text(text: str, max_length: int, truncate_start: bool = True) -> st
     if truncate_start:
         return '...' + text[-max_length:]
     return text[:max_length] + '...'
+
+def process_text_input(text: str) -> List[str]:
+    """Convert text input into list, handling various formats"""
+    if not text:  # Handle None or empty string
+        return []
+    return [line.strip() for line in text.strip().split('\n') if line.strip()]
 
 def calculate_metrics(G) -> Dict:
     """Calculate advanced network metrics"""
@@ -40,6 +46,42 @@ def calculate_metrics(G) -> Dict:
         metrics['communities'] = 'N/A'
     
     return metrics
+
+def create_connection_graph(data_dict):
+    """Create a NetworkX graph from the input data"""
+    G = nx.Graph()
+    
+    # Color mapping for different node types
+    colors = {
+        'col1': '#FF6B6B',  # Coral red
+        'col2': '#4ECDC4',  # Turquoise
+        'col3': '#45B7D1',  # Sky blue
+        'col4': '#96CEB4'   # Sage green
+    }
+    
+    # Get the maximum length of all columns
+    max_length = max(len(values) for values in data_dict.values())
+    
+    # Create a pandas DataFrame with aligned rows
+    df = pd.DataFrame({
+        col: values + [None] * (max_length - len(values))
+        for col, values in data_dict.items()
+    })
+    
+    # Add nodes with their respective colors
+    for col in df.columns:
+        for value in df[col].dropna():
+            if value:  # Only add if value exists
+                G.add_node(str(value), color=colors[col], type=col)
+    
+    # Add edges by connecting values in the same row
+    for idx in df.index:
+        row_values = [str(val) for val in df.loc[idx] if pd.notna(val)]
+        for i in range(len(row_values)):
+            for j in range(i + 1, len(row_values)):
+                G.add_edge(row_values[i], row_values[j])
+    
+    return G
 
 def plot_graph(G, title_text, viz_settings):
     """Create and return an enhanced plot of the graph with tooltips"""
@@ -67,7 +109,7 @@ def plot_graph(G, title_text, viz_settings):
                    (degrees[node] - min_degree) / (max_degree - min_degree)
         node_sizes.append(size)
     
-    # Use specified layout algorithm
+    # Use specified layout
     if viz_settings['layout'] == 'spring':
         pos = nx.spring_layout(G, k=viz_settings['spacing'])
     elif viz_settings['layout'] == 'circular':
@@ -75,43 +117,43 @@ def plot_graph(G, title_text, viz_settings):
     else:
         pos = nx.kamada_kawai_layout(G)
     
-    # Draw edges with custom style
+    # Draw edges
     nx.draw_networkx_edges(G, pos,
                           edge_color=viz_settings['edge_color'],
                           alpha=viz_settings['edge_alpha'],
                           width=viz_settings['edge_width'])
     
     # Draw nodes
-    nodes = nx.draw_networkx_nodes(G, pos,
-                                 node_color=colors,
-                                 node_size=node_sizes,
-                                 alpha=1,  # Alpha is handled in colors
-                                 edgecolors=viz_settings['node_edge_color'],
-                                 linewidths=viz_settings['node_edge_width'])
+    nx.draw_networkx_nodes(G, pos,
+                          node_color=colors,
+                          node_size=node_sizes,
+                          alpha=1,
+                          edgecolors=viz_settings['node_edge_color'],
+                          linewidths=viz_settings['node_edge_width'])
     
-    # Create truncated labels
-    labels = {node: truncate_text(node, 
+    # Create labels with annotations for full text
+    for node in G.nodes():
+        x, y = pos[node]
+        full_text = node
+        truncated = truncate_text(node, 
                                 viz_settings['max_label_length'],
-                                not viz_settings['truncate_start']) 
-             for node in G.nodes()}
-    
-    # Draw labels
-    nx.draw_networkx_labels(G, pos,
-                          labels=labels,
-                          font_size=viz_settings['font_size'],
-                          font_weight='bold',
-                          font_family='sans-serif')
-    
-    # Add tooltips using mplcursors
-    cursor_obj = cursor(nodes, hover=True)
-    
-    @cursor_obj.connect("add")
-    def on_add(sel):
-        node_idx = sel.target.index
-        node = list(G.nodes())[node_idx]
-        degree = G.degree(node)
-        sel.annotation.set_text(f"{node}\nConnections: {degree}")
-        sel.annotation.get_bbox_patch().set(fc="white", alpha=0.8)
+                                not viz_settings['truncate_start'])
+        
+        # Draw truncated label
+        plt.text(x, y, truncated,
+                fontsize=viz_settings['font_size'],
+                fontweight='bold',
+                horizontalalignment='center',
+                verticalalignment='center')
+        
+        # Add small indicator if text is truncated
+        if full_text != truncated:
+            plt.text(x, y - 0.02,
+                    f"({G.degree(node)} connections)",
+                    fontsize=viz_settings['font_size'] - 2,
+                    alpha=0.7,
+                    horizontalalignment='center',
+                    verticalalignment='top')
     
     plt.title(title_text, 
              pad=20,
@@ -142,12 +184,28 @@ def plot_graph(G, title_text, viz_settings):
     
     return plt
 
-# [Previous imports and helper functions remain the same]
-
 # Set up the Streamlit page
 st.set_page_config(page_title="Connection Visualizer", layout="wide")
 
-# Add custom CSS [Previous CSS remains the same]
+# Custom CSS for better styling
+st.markdown("""
+    <style>
+    .stTextInput > label {
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+    .stTextArea > label {
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+    .stButton > button {
+        width: 100%;
+        border-radius: 5px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 st.title("🔍 Connection Pattern Visualizer")
 st.markdown("---")
@@ -232,8 +290,31 @@ viz_settings = {
     'node_edge_width': node_edge_width
 }
 
-# [Previous input columns code remains the same]
+# Create columns for the text inputs
+col1, col2 = st.columns(2)
+col3, col4 = st.columns(2)
 
+with col1:
+    column1_name = st.text_input("Column 1 Name", "Client IDs")
+    column1_data = st.text_area(f"Paste {column1_name} (one per line)", height=150)
+
+with col2:
+    column2_name = st.text_input("Column 2 Name", "Cookie Hashes")
+    column2_data = st.text_area(f"Paste {column2_name} (one per line)", height=150)
+
+with col3:
+    column3_name = st.text_input("Column 3 Name", "Password Hashes")
+    column3_data = st.text_area(f"Paste {column3_name} (one per line)", height=150)
+
+with col4:
+    column4_name = st.text_input("Column 4 Name", "Custom Field")
+    column4_data = st.text_area(f"Paste {column4_name} (one per line)", height=150)
+
+title_text = st.text_input("Visualization Title", 
+                          "Connection Analysis of Fraud Patterns",
+                          help="Enter a brief title or description for your visualization")
+
+# Generate visualization button
 if st.button("Generate Visualization", type="primary"):
     data = {
         'col1': process_text_input(column1_data),
@@ -293,7 +374,6 @@ if st.button("Generate Visualization", type="primary"):
             st.dataframe(analysis_df, use_container_width=True)
         else:
             st.info("No shared connections found in the data.")
-        
     else:
         st.warning("Please enter some data in at least two columns to generate a visualization.")
 
